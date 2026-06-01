@@ -13,6 +13,8 @@ import PickupDashboard from './pages/PickupDashboard';
 import Landing from './pages/Landing';
 import Profile from './pages/Profile';
 import PricingCalculator from './pages/PricingCalculator';
+import AdminSettings from './pages/AdminSettings';
+import AIChatWidget from './components/AIChatWidget';
 
 // Public routes that show the global Navbar + Footer (no sidebar)
 const PUBLIC_ROUTES = ['/', '/login', '/register'];
@@ -110,6 +112,14 @@ const AppLayout = () => {
                 </RoleRoute>
               </ProtectedRoute>
             } />
+            
+            <Route path="/admin-settings" element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={['ROLE_ADMIN']}>
+                  <AdminSettings />
+                </RoleRoute>
+              </ProtectedRoute>
+            } />
 
             <Route path="/profile" element={
               <ProtectedRoute>
@@ -131,6 +141,7 @@ const AppLayout = () => {
 
         {location.pathname === '/' && <Footer />}
       </div>
+      {user && <AIChatWidget />}
     </div>
   );
 };

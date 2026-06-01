@@ -33,6 +33,10 @@ const AppSidebar = () => {
     navItems.push({ to: '/pricing-calculator', label: 'Pricing Calculator', icon: FaBox });
   }
 
+  if (user.role === 'ROLE_ADMIN') {
+    navItems.push({ to: '/admin-settings', label: 'System Settings', icon: FaCog });
+  }
+
   const handleLogout = () => {
     logout();
     navigate('/login');
