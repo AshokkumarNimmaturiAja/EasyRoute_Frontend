@@ -16,6 +16,7 @@ const AdminSettings = () => {
   const fetchTruckTypes = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_V2_URL}/metadata/ui-config/TRUCK_TYPES`);
+      if (!response.ok) throw new Error('Response not OK: ' + response.status);
       const data = await response.json();
       setTruckTypes(data);
     } catch (err) {

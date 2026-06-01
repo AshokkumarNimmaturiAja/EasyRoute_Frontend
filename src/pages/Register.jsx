@@ -31,7 +31,10 @@ const Register = () => {
   React.useEffect(() => {
     // Fetch CMS UI Data
     fetch(`${import.meta.env.VITE_API_V2_URL}/metadata/ui-config/TRUCK_TYPES`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Response not OK: ' + res.status);
+        return res.json();
+      })
       .then(data => {
         setTruckTypeOptions(data);
         if (data.length > 0) setTruckType(data[0]);
