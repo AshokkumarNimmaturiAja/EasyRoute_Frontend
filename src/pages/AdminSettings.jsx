@@ -15,7 +15,7 @@ const AdminSettings = () => {
 
   const fetchTruckTypes = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/v2/metadata/ui-config/TRUCK_TYPES');
+      const response = await fetch(`${import.meta.env.VITE_API_V2_URL}/metadata/ui-config/TRUCK_TYPES`);
       const data = await response.json();
       setTruckTypes(data);
     } catch (err) {
@@ -43,7 +43,7 @@ const AdminSettings = () => {
     setSaving(true);
     setMessage({ text: '', type: '' });
     try {
-      const response = await fetch('http://localhost:8080/api/v2/metadata/ui-config/TRUCK_TYPES', {
+      const response = await fetch(`${import.meta.env.VITE_API_V2_URL}/metadata/ui-config/TRUCK_TYPES`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

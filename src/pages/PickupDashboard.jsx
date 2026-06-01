@@ -389,7 +389,7 @@ const PickupDashboard = () => {
     formData.append('file', file);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:8080/api/v1/upload/document', {
+      const res = await fetch(`${import.meta.env.VITE_API_V1_URL}/upload/document`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
