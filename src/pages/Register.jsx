@@ -30,7 +30,7 @@ const Register = () => {
 
   React.useEffect(() => {
     // Fetch CMS UI Data
-    fetch('http://localhost:8080/api/v2/metadata/ui-config/TRUCK_TYPES')
+    fetch(`${import.meta.env.VITE_API_V2_URL}/metadata/ui-config/TRUCK_TYPES`)
       .then(res => res.json())
       .then(data => {
         setTruckTypeOptions(data);
