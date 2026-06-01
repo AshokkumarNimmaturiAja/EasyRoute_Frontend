@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../api';
 import { AuthContext } from '../context/AuthContext';
 import { FaUser, FaUsers, FaEye, FaQuestionCircle, FaClock, FaPhone, FaEdit, FaArrowRight, FaSpinner, FaCalendarAlt, FaLayerGroup, FaChartLine, FaSearch, FaShieldVirus, FaBox, FaCheck, FaInfoCircle, FaExclamationCircle, FaTruck, FaTimes, FaShieldAlt, FaCheckCircle, FaEnvelope, FaDollarSign, FaBan, FaUnlock, FaCodeBranch, FaSyncAlt, FaExternalLinkAlt, FaHeadset, FaReply } from 'react-icons/fa';
+import Profile from './Profile';
 const AdminDashboard = () => {
   const { user } = useContext(AuthContext);
   // Navigation Tabs: 'metrics' | 'profile' | 'users' | 'trucks' | 'fleet' | 'pairings' | 'track' | 'logs'
@@ -10,6 +11,8 @@ const AdminDashboard = () => {
   
   // Data States
   const [summary, setSummary] = useState(null);
+  const [appVersions, setAppVersions] = useState([]);
+  const [newVersionForm, setNewVersionForm] = useState({ platform: 'WEB', versionNumber: '', apiVersion: 'V2', status: 'ACTIVE', isMandatoryUpdate: false });
   const [users, setUsers] = useState([]);
   const [trucks, setTrucks] = useState([]);
   const [pendingTrucks, setPendingTrucks] = useState([]);
@@ -105,6 +108,10 @@ const AdminDashboard = () => {
       const ticketsRes = await api.get('/tickets/admin/all');
       setSupportTickets(ticketsRes.data.data || []);
       
+      // 10. Fetch App Versions
+      const versionsRes = await api.get('/admin/versions');
+      setAppVersions(versionsRes.data || []);
+      
     } catch (err) {
       console.error(err);
       const msg = err.response?.data?.message || err.message || 'Unknown error';
@@ -133,6 +140,34 @@ const AdminDashboard = () => {
       fetchDashboardData();
     } catch (err) {
       showToast('error', err.response?.data?.message || err.message || 'Status override failed');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCreateVersion = async (e) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      await api.post('/admin/versions', newVersionForm);
+      showToast('success', 'New App Version created successfully');
+      setNewVersionForm({ platform: 'WEB', versionNumber: '', apiVersion: 'V2', status: 'ACTIVE', isMandatoryUpdate: false });
+      fetchDashboardData();
+    } catch (err) {
+      showToast('error', err.response?.data?.message || err.message || 'Failed to create app version');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUpdateVersionStatus = async (id, status) => {
+    setActionLoading(true);
+    try {
+      await api.put(`/admin/versions/${id}/status?status=${status}`);
+      showToast('success', `Version status updated to ${status}`);
+      fetchDashboardData();
+    } catch (err) {
+      showToast('error', err.response?.data?.message || err.message || 'Failed to update version status');
     } finally {
       setActionLoading(false);
     }
@@ -364,6 +399,9 @@ const AdminDashboard = () => {
         <button className={`tab-btn ${activeTab === 'support' ? 'active' : ''}`} onClick={() => setActiveTab('support')}>
           <FaHeadset size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Support Tickets {supportTickets.filter(t => t.status === 'OPEN').length > 0 && <span style={{ marginLeft: 4, background: '#ef4444', color: '#fff', borderRadius: 50, fontSize: '0.68rem', fontWeight: 700, padding: '1px 6px' }}>{supportTickets.filter(t => t.status === 'OPEN').length}</span>}
         </button>
+        <button className={`tab-btn ${activeTab === 'versions' ? 'active' : ''}`} onClick={() => setActiveTab('versions')}>
+          <FaCodeBranch size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Version Control
+        </button>
       </div>
 
       {loading && !summary ? (
@@ -505,47 +543,8 @@ const AdminDashboard = () => {
 
           {/* TAB: PROFILE OVERVIEW */}
           {activeTab === 'profile' && (
-            <div className="glass-card" style={{ maxWidth: '800px', margin: '0 auto' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
-                <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'var(--color-primary-glow)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--color-primary)' }}>
-                  <FaShieldAlt size={40} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{user?.name}</h3>
-                  <span className="badge badge-pending" style={{ marginTop: '0.25rem' }}>
-                    <FaShieldAlt size={12} style={{ marginRight: 4 }} /> Platform Operations Board Director
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }} className="grid-2">
-                <div style={{ background: 'rgba(0, 0, 0, 0.02)', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-                  <h4 style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <FaInfoCircle size={16} style={{ color: 'var(--color-primary)' }} />
-                    <span>Administrative Credentials</span>
-                  </h4>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <div><strong>Registered Email:</strong> {user?.email}</div>
-                    <div><strong>Matched Phone:</strong> {users.find(u => u.email === user?.email)?.phone || 'N/A'}</div>
-                    <div><strong>User ID Reference:</strong> <span style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{user?.id}</span></div>
-                    <div><strong>Access Rights:</strong> Full Read-Write Board Operations</div>
-                  </div>
-                </div>
-
-                <div style={{ background: 'rgba(0, 0, 0, 0.02)', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-                  <h4 style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <FaShieldAlt size={16} style={{ color: 'var(--color-primary)' }} />
-                    <span>Control Guidelines</span>
-                  </h4>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                    As an administrator, you hold complete access to platform transactions. You can approve transporter fleet registrations, suspend user accounts, consolidation bookings, and override delivery states.
-                  </p>
-                  <Link to="/profile" className="btn btn-secondary btn-sm" style={{ marginTop: '0.75rem', display: 'inline-flex' }}>
-                    <FaEdit size={12} />
-                    <span>Edit Profile Settings & Password</span>
-                  </Link>
-                </div>
-              </div>
+            <div style={{ marginTop: '-2rem' }}>
+              <Profile />
             </div>
           )}
 
@@ -1406,6 +1405,131 @@ const AdminDashboard = () => {
               >
                 Confirm Decision
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: VERSION CONTROL */}
+      {activeTab === 'versions' && (
+        <div className="glass-card">
+          <div className="grid-2">
+            <div>
+              <h3 className="form-section-title">
+                <FaCodeBranch size={20} />
+                <span>Version Control Matrix</span>
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                Manage API assignments for mobile client installations.
+              </p>
+              
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Platform</th>
+                      <th>Version</th>
+                      <th>API</th>
+                      <th>Update</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {appVersions.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: 'center' }}>No version records found.</td>
+                      </tr>
+                    ) : (
+                      appVersions.map(v => (
+                        <tr key={v.id}>
+                          <td>{v.platform}</td>
+                          <td>{v.versionNumber}</td>
+                          <td><span className={`badge ${v.apiVersion === 'V2' ? 'badge-delivered' : 'badge-transit'}`}>{v.apiVersion}</span></td>
+                          <td>{v.isMandatoryUpdate ? 'Mandatory' : 'Optional'}</td>
+                          <td>
+                            <span className={`badge ${v.status === 'ACTIVE' ? 'badge-delivered' : 'badge-cancelled'}`}>{v.status}</span>
+                          </td>
+                          <td>
+                            {v.status === 'ACTIVE' ? (
+                              <button className="btn btn-danger btn-sm" onClick={() => handleUpdateVersionStatus(v.id, 'DEPRECATED')}>
+                                Deprecate
+                              </button>
+                            ) : (
+                              <button className="btn btn-secondary btn-sm" onClick={() => handleUpdateVersionStatus(v.id, 'ACTIVE')}>
+                                Reactivate
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(0,0,0,0.02)', padding: '1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+              <h3 className="form-section-title" style={{ marginTop: 0 }}>
+                <span>Register New Version</span>
+              </h3>
+              <form onSubmit={handleCreateVersion}>
+                <div className="form-group">
+                  <label className="form-label">Platform target</label>
+                  <select 
+                    className="form-select"
+                    value={newVersionForm.platform}
+                    onChange={(e) => setNewVersionForm({...newVersionForm, platform: e.target.value})}
+                    required
+                  >
+                    <option value="WEB">WEB</option>
+                    <option value="ANDROID">ANDROID</option>
+                    <option value="IOS">IOS</option>
+                  </select>
+                </div>
+                
+                <div className="form-group">
+                  <label className="form-label">Release Version (e.g. v2.1.0)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={newVersionForm.versionNumber}
+                    onChange={(e) => setNewVersionForm({...newVersionForm, versionNumber: e.target.value})}
+                    placeholder="v2.0.0"
+                    required
+                  />
+                </div>
+
+                <div className="grid-2" style={{ gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">API Mapping</label>
+                    <select 
+                      className="form-select"
+                      value={newVersionForm.apiVersion}
+                      onChange={(e) => setNewVersionForm({...newVersionForm, apiVersion: e.target.value})}
+                    >
+                      <option value="V1">V1 (Legacy)</option>
+                      <option value="V2">V2 (Dynamic Metadata)</option>
+                    </select>
+                  </div>
+                  
+                  <div className="form-group" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <label className="form-label">Force Upgrade</label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                      <input 
+                        type="checkbox"
+                        checked={newVersionForm.isMandatoryUpdate}
+                        onChange={(e) => setNewVersionForm({...newVersionForm, isMandatoryUpdate: e.target.checked})}
+                      />
+                      <span>Mandatory deployment</span>
+                    </label>
+                  </div>
+                </div>
+
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={actionLoading}>
+                  {actionLoading ? 'Registering...' : 'Submit Version Entry'}
+                </button>
+              </form>
             </div>
           </div>
         </div>

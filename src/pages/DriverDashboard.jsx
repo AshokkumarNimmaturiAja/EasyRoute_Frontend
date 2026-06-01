@@ -301,6 +301,10 @@ const DriverDashboard = () => {
   const [isEditingVehicle, setIsEditingVehicle] = useState(false);
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
+  // Multi-vehicle UI state
+  const [showAddVehicle, setShowAddVehicle] = useState(false);
+  const [editingTruck, setEditingTruck] = useState(null);
+  const [locationTarget, setLocationTarget] = useState(null);
 
   // Support Ticket state
   const [tickets, setTickets] = useState([]);
@@ -454,15 +458,16 @@ const DriverDashboard = () => {
 
   const handleEditTruck = async (e) => {
     e.preventDefault();
+    if (!editingTruck) return;
     setEditLoading(true);
     try {
-      await api.put(`/trucks/${trucks[0].id}`, {
+      await api.put(`/trucks/${editingTruck.id}`, {
         capacityTons: parseFloat(capacity),
-        rcDocumentUrl: rcUrl,
-        licenseUrl: licenseUrl
+        rcDocumentUrl: rcUrl || editingTruck.rcDocumentUrl,
+        licenseUrl: licenseUrl || editingTruck.licenseUrl
       });
       showToast('success', 'Truck updated successfully!');
-      setIsEditingVehicle(false);
+      setEditingTruck(null);
       fetchDriverData();
     } catch (err) {
       showToast('error', err.response?.data?.message || 'Failed to update truck');
@@ -473,6 +478,7 @@ const DriverDashboard = () => {
 
   const handleUpdateLocation = async (e) => {
     e.preventDefault();
+    if (!locationTarget) return;
     setEditLoading(true);
     try {
       if (!selectedState || !selectedCity || !selectedLocation) {
@@ -481,11 +487,10 @@ const DriverDashboard = () => {
         return;
       }
       const fullLocation = `${selectedLocation}, ${selectedCity}, ${selectedState}`;
-      await api.put(`/trucks/${trucks[0].id}`, {
-        currentRouteArea: fullLocation
-      });
+      await api.put(`/trucks/${locationTarget.id}`, { currentRouteArea: fullLocation });
       showToast('success', 'Location updated successfully!');
-      setIsUpdatingLocation(false);
+      setLocationTarget(null);
+      setSelectedState(''); setSelectedCity(''); setSelectedLocation('');
       fetchDriverData();
     } catch (err) {
       showToast('error', err.response?.data?.message || 'Failed to update location');
@@ -680,50 +685,110 @@ const DriverDashboard = () => {
 
   /** My Vehicle Tab */
   const renderMyVehicle = () => (
-    <div style={{ maxWidth: 640 }}>
-      {!hasTruck ? (
+    <div>
+      {/* Vehicle Cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+        {trucks.map(truck => (
+          <div key={truck.id} className="glass-card" style={{ borderLeft: '4px solid var(--color-primary)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+              <div>
+                <h4 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-secondary)', marginBottom: '0.15rem' }}>
+                  {truck.registrationNumber}
+                </h4>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  {truck.truckType} &nbsp;|&nbsp; {truck.capacityTons} Tons
+                </span>
+                {truck.currentRouteArea && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.4rem', padding: '0.3rem 0.7rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '20px', width: 'fit-content' }}>
+                    <FaMapMarkerAlt size={11} style={{ color: 'var(--color-primary)' }} />
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 600 }}>{truck.currentRouteArea}</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                {truck.verified
+                  ? <span className="badge badge-delivered" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><FaCheckCircle size={11} /> Approved</span>
+                  : <span className="badge badge-pending">Pending Approval</span>
+                }
+              </div>
+            </div>
+
+
+
+            {/* Documents */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              {truck.rcDocumentUrl && (
+                <a href={truck.rcDocumentUrl} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary" style={{ fontSize: '0.78rem' }}>
+                  <FaFileAlt size={12} style={{ marginRight: 4 }} /> RC File
+                </a>
+              )}
+              {truck.licenseUrl && (
+                <a href={truck.licenseUrl} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary" style={{ fontSize: '0.78rem' }}>
+                  <FaFileAlt size={12} style={{ marginRight: 4 }} /> License
+                </a>
+              )}
+              {truck.insuranceUrl && (
+                <a href={truck.insuranceUrl} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary" style={{ fontSize: '0.78rem' }}>
+                  <FaShieldAlt size={12} style={{ marginRight: 4 }} /> Insurance
+                </a>
+              )}
+            </div>
+
+            {/* Per-vehicle action buttons */}
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => {
+                setEditingTruck(truck);
+                setCapacity(String(truck.capacityTons || ''));
+                setRcUrl(''); setLicenseUrl(''); setInsuranceUrl('');
+              }}>
+                Edit Truck Details
+              </button>
+              <button
+                className="btn btn-sm"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none' }}
+                onClick={() => {
+                  setLocationTarget(truck);
+                  setSelectedState(''); setSelectedCity(''); setSelectedLocation('');
+                }}
+              >
+                <FaMapMarkerAlt size={12} style={{ marginRight: 5 }} />
+                Update Location
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Add Vehicle Button */}
+      <button
+        className="btn btn-primary"
+        style={{ width: '100%', padding: '0.85rem', marginBottom: '1.5rem', background: showAddVehicle ? '#64748b' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: showAddVehicle ? 'none' : '0 4px 15px rgba(99,102,241,0.3)' }}
+        onClick={() => { setShowAddVehicle(!showAddVehicle); setError(''); }}
+      >
+        {showAddVehicle ? '✕ Cancel' : `+ ${trucks.length > 0 ? 'Add Another Vehicle' : 'Register First Vehicle'}`}
+      </button>
+
+      {/* Add Vehicle Form */}
+      {showAddVehicle && (
         <div className="glass-card">
           <h3 className="form-section-title">
             <FaTruck size={20} />
             <span>Register Transport Vehicle</span>
           </h3>
-
           {error && (
-            <div
-              style={{
-                background: 'rgba(239, 68, 68, 0.08)',
-                border: '1px solid rgba(239, 68, 68, 0.25)',
-                color: '#ef4444',
-                padding: '0.8rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                marginBottom: '1.25rem',
-                fontSize: '0.9rem',
-              }}
-            >
+            <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', padding: '0.8rem 1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem', fontSize: '0.9rem' }}>
               {error}
             </div>
           )}
-
           <form onSubmit={handleRegisterTruck}>
             <div className="grid-2" style={{ gap: '1rem' }}>
               <div className="form-group">
                 <label className="form-label">Registration Number *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. MH-12-AB-1234"
-                  className="form-input"
-                  value={regNum}
-                  onChange={(e) => setRegNum(e.target.value)}
-                />
+                <input type="text" required placeholder="e.g. MH-12-AB-1234" className="form-input" value={regNum} onChange={(e) => setRegNum(e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Vehicle Type</label>
-                <select
-                  className="form-select"
-                  value={truckType}
-                  onChange={(e) => setTruckType(e.target.value)}
-                >
+                <select className="form-select" value={truckType} onChange={(e) => setTruckType(e.target.value)}>
                   <option value="MINI">Mini Truck (&lt; 2 tons)</option>
                   <option value="MEDIUM">Medium Cargo (2-5 tons)</option>
                   <option value="LARGE">Large Lorry (5-10 tons)</option>
@@ -731,261 +796,111 @@ const DriverDashboard = () => {
                 </select>
               </div>
             </div>
-
-            <div className="grid-2" style={{ gap: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">Capacity (Tons) *</label>
-                <input
-                  type="number"
-                  required
-                  step="0.1"
-                  min="0.1"
-                  className="form-input"
-                  value={capacity}
-                  onChange={(e) => setCapacity(e.target.value)}
-                />
-              </div>
-              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label className="form-label">Operating Location *</label>
-                  <div className="grid-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
-                    <select className="form-select" disabled value="India">
-                      <option value="India">India</option>
-                    </select>
-                    <select 
-                      className="form-select" 
-                      required 
-                      value={selectedState} 
-                      onChange={(e) => {
-                        setSelectedState(e.target.value);
-                        setSelectedCity('');
-                        setSelectedLocation('');
-                      }}
-                    >
-                      <option value="">Select State</option>
-                      {STATES.map(state => (
-                        <option key={state} value={state}>{state}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid-2" style={{ gap: '1rem' }}>
-                    <select 
-                      className="form-select" 
-                      required 
-                      value={selectedCity} 
-                      onChange={(e) => {
-                        setSelectedCity(e.target.value);
-                        setSelectedLocation('');
-                      }}
-                      disabled={!selectedState}
-                    >
-                      <option value="">Select City</option>
-                      {selectedState && CITIES_BY_STATE[selectedState]?.map(city => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
-                    </select>
-                    <select 
-                      className="form-select" 
-                      required 
-                      value={selectedLocation} 
-                      onChange={(e) => setSelectedLocation(e.target.value)}
-                      disabled={!selectedCity}
-                    >
-                      <option value="">Select Location</option>
-                      {selectedCity && LOCATIONS_BY_CITY[selectedCity]?.map(loc => (
-                        <option key={loc} value={loc}>{loc}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">RC Document URL *</label>
-              <input
-                type="url"
-                required
-                className="form-input"
-                value={rcUrl}
-                onChange={(e) => setRcUrl(e.target.value)}
-              />
-            </div>
-
-            <div className="grid-2" style={{ gap: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">Driving License URL *</label>
-                <input
-                  type="url"
-                  required
-                  className="form-input"
-                  value={licenseUrl}
-                  onChange={(e) => setLicenseUrl(e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Insurance URL</label>
-                <input
-                  type="url"
-                  className="form-input"
-                  value={insuranceUrl}
-                  onChange={(e) => setInsuranceUrl(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="form-group" style={{ margin: '1.5rem 0' }}>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '0.5rem',
-                  cursor: 'pointer',
-                  fontSize: '0.88rem',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  style={{ marginTop: 3 }}
-                  checked={rateAccepted}
-                  onChange={(e) => setRateAccepted(e.target.checked)}
-                />
-                <span>
-                  I accept the EasyRoute rate cards, platform commission (15%), and driver payout terms.
-                </span>
-              </label>
-            </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={{ width: '100%', padding: '0.85rem' }}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <>
-                  <FaSpinner
-                    size={18}
-                    style={{ marginRight: 8, animation: 'spin 1s linear infinite' }}
-                  />
-                  <span>Submitting Registration…</span>
-                </>
-              ) : (
-                <span>Register Vehicle</span>
-              )}
-            </button>
-          </form>
-        </div>
-      ) : (
-        <div className="glass-card">
-          <h3 className="form-section-title">
-            <FaTruck size={20} />
-            <span>Vehicle Profile</span>
-          </h3>
-
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              marginBottom: '1.5rem',
-            }}
-          >
-            <div>
-              <h4 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--color-secondary)' }}>
-                {mainTruck.registrationNumber}
-              </h4>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                Type: {mainTruck.truckType} &nbsp;|&nbsp; Capacity: {mainTruck.capacityTons} Tons
-              </span>
-              {/* ── Current location display ── */}
-              {mainTruck.currentRouteArea ? (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '0.4rem',
-                  marginTop: '0.5rem', padding: '0.35rem 0.75rem',
-                  background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)',
-                  borderRadius: '20px', width: 'fit-content',
-                }}>
-                  <FaMapMarkerAlt size={12} style={{ color: 'var(--color-primary)' }} />
-                  <span style={{ fontSize: '0.82rem', color: 'var(--color-primary)', fontWeight: 600 }}>
-                    {mainTruck.currentRouteArea}
-                  </span>
-                </div>
-              ) : (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '0.4rem',
-                  marginTop: '0.5rem', padding: '0.35rem 0.75rem',
-                  background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)',
-                  borderRadius: '20px', width: 'fit-content',
-                }}>
-                  <FaMapMarkerAlt size={12} style={{ color: '#f59e0b' }} />
-                  <span style={{ fontSize: '0.82rem', color: '#f59e0b', fontWeight: 600 }}>No location set</span>
-                </div>
-              )}
-            </div>
-            <div>
-              {mainTruck.verified ? (
-                <span
-                  className="badge badge-delivered"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                >
-                  <FaCheckCircle size={12} /> Approved
-                </span>
-              ) : (
-                <span className="badge badge-pending">Pending Approval</span>
-              )}
-            </div>
-          </div>
-
-          {/* ── Edit / Update Location buttons ── */}
-          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setIsEditingVehicle(!isEditingVehicle); setIsUpdatingLocation(false); }}>
-              {isEditingVehicle ? 'Cancel Edit' : 'Edit Truck Details'}
-            </button>
-            <button
-              className="btn btn-sm"
-              onClick={() => { setIsUpdatingLocation(!isUpdatingLocation); setIsEditingVehicle(false); }}
-              style={{
-                background: isUpdatingLocation ? 'var(--bg-dark)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: '#fff',
-                border: '1px solid rgba(99,102,241,0.3)',
-              }}
-            >
-              <FaMapMarkerAlt size={13} style={{ marginRight: '5px' }} />
-              {isUpdatingLocation ? 'Cancel' : 'Update Location'}
-            </button>
-          </div>
-
-          {/* ── Edit Truck form ── */}
-          {isEditingVehicle && (
-            <form onSubmit={handleEditTruck} style={{ marginBottom: '1.5rem', padding: '1.25rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-              <h4 style={{ marginBottom: '1rem', fontWeight: 700 }}>Edit Truck Details</h4>
+            <div className="grid-2" style={{ gap: '1rem', marginTop: '0.5rem' }}>
               <div className="form-group">
                 <label className="form-label">Capacity (Tons) *</label>
                 <input type="number" required step="0.1" min="0.1" className="form-input" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
               </div>
-              <div className="form-group" style={{ marginTop: '0.75rem' }}>
-                <label className="form-label">RC Document (PDF/Image)</label>
-                <input type="file" className="form-input" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => handleFileUpload(e.target.files[0], setRcUrl)} />
-                {rcUrl && <p style={{ fontSize: '0.8rem', color: 'var(--color-primary)', marginTop: '0.3rem' }}>✓ File uploaded</p>}
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label">Operating Location *</label>
+                <div className="grid-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
+                  <select className="form-select" disabled value="India"><option value="India">India</option></select>
+                  <select className="form-select" required value={selectedState} onChange={(e) => { setSelectedState(e.target.value); setSelectedCity(''); setSelectedLocation(''); }}>
+                    <option value="">Select State</option>
+                    {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="grid-2" style={{ gap: '1rem' }}>
+                  <select className="form-select" required value={selectedCity} onChange={(e) => { setSelectedCity(e.target.value); setSelectedLocation(''); }} disabled={!selectedState}>
+                    <option value="">Select City</option>
+                    {selectedState && CITIES_BY_STATE[selectedState]?.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <select className="form-select" required value={selectedLocation} onChange={(e) => setSelectedLocation(e.target.value)} disabled={!selectedCity}>
+                    <option value="">Select Area</option>
+                    {selectedCity && LOCATIONS_BY_CITY[selectedCity]?.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </div>
               </div>
-              <div className="form-group" style={{ marginTop: '0.75rem' }}>
-                <label className="form-label">Driving License (PDF/Image)</label>
-                <input type="file" className="form-input" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => handleFileUpload(e.target.files[0], setLicenseUrl)} />
-                {licenseUrl && <p style={{ fontSize: '0.8rem', color: 'var(--color-primary)', marginTop: '0.3rem' }}>✓ File uploaded</p>}
+            </div>
+            <div className="form-group" style={{ marginTop: '0.5rem' }}>
+              <label className="form-label">RC Document (PDF/Image) *</label>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg" className="form-input" onChange={(e) => handleFileUpload(e.target.files[0], setRcUrl)} />
+              {rcUrl && <p style={{ fontSize: '0.8rem', color: 'var(--color-primary)', marginTop: '0.25rem' }}>✓ Uploaded</p>}
+            </div>
+            <div className="grid-2" style={{ gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">Driving License (PDF/Image) *</label>
+                <input type="file" accept=".pdf,.png,.jpg,.jpeg" className="form-input" onChange={(e) => handleFileUpload(e.target.files[0], setLicenseUrl)} />
+                {licenseUrl && <p style={{ fontSize: '0.8rem', color: 'var(--color-primary)', marginTop: '0.25rem' }}>✓ Uploaded</p>}
               </div>
-              <button type="submit" className="btn btn-primary" disabled={editLoading} style={{ marginTop: '1rem' }}>
-                {editLoading ? <FaSpinner style={{ animation: 'spin 1s linear infinite' }} /> : 'Save Changes'}
-              </button>
-            </form>
-          )}
+              <div className="form-group">
+                <label className="form-label">Insurance (optional)</label>
+                <input type="file" accept=".pdf,.png,.jpg,.jpeg" className="form-input" onChange={(e) => handleFileUpload(e.target.files[0], setInsuranceUrl)} />
+                {insuranceUrl && <p style={{ fontSize: '0.8rem', color: 'var(--color-primary)', marginTop: '0.25rem' }}>✓ Uploaded</p>}
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: '1.5rem 0' }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem' }}>
+                <input type="checkbox" style={{ marginTop: 3 }} checked={rateAccepted} onChange={(e) => setRateAccepted(e.target.checked)} />
+                <span>I accept the EasyRoute rate cards, platform commission (15%), and driver payout terms.</span>
+              </label>
+            </div>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.85rem' }} disabled={submitting}>
+              {submitting ? <><FaSpinner size={18} style={{ marginRight: 8, animation: 'spin 1s linear infinite' }} /><span>Submitting…</span></> : <span>Register Vehicle</span>}
+            </button>
+          </form>
+        </div>
+      )}
 
-          {/* ── Update Location form ── */}
-          {isUpdatingLocation && (
-            <form onSubmit={handleUpdateLocation} style={{ marginBottom: '1.5rem', padding: '1.25rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-              <h4 style={{ marginBottom: '1rem', fontWeight: 700 }}>Update Operating Location</h4>
+      {/* ── Edit Vehicle Modal ── */}
+      {editingTruck && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: '2rem', width: '100%', maxWidth: '520px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0 }}>Edit Truck Details</h3>
+              <button className="btn btn-sm btn-secondary" onClick={() => setEditingTruck(null)}>✕</button>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>{editingTruck.registrationNumber}</p>
+            <form onSubmit={handleEditTruck}>
+              <div className="form-group">
+                <label className="form-label">Capacity (Tons) *</label>
+                <input type="number" required step="0.1" min="0.1" className="form-input" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ marginTop: '1rem' }}>
+                <label className="form-label">RC Document (upload new)</label>
+                <input type="file" className="form-input" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => handleFileUpload(e.target.files[0], setRcUrl)} />
+                {rcUrl && <p style={{ fontSize: '0.8rem', color: 'var(--color-primary)', marginTop: '0.25rem' }}>✓ New file uploaded</p>}
+                {editingTruck.rcDocumentUrl && !rcUrl && <a href={editingTruck.rcDocumentUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem', color: 'var(--color-primary)' }}>View current RC →</a>}
+              </div>
+              <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                <label className="form-label">Driving License (upload new)</label>
+                <input type="file" className="form-input" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => handleFileUpload(e.target.files[0], setLicenseUrl)} />
+                {licenseUrl && <p style={{ fontSize: '0.8rem', color: 'var(--color-primary)', marginTop: '0.25rem' }}>✓ New file uploaded</p>}
+                {editingTruck.licenseUrl && !licenseUrl && <a href={editingTruck.licenseUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem', color: 'var(--color-primary)' }}>View current license →</a>}
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingTruck(null)} style={{ flex: 1 }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={editLoading} style={{ flex: 2 }}>
+                  {editLoading ? <FaSpinner style={{ animation: 'spin 1s linear infinite' }} /> : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Update Location Modal ── */}
+      {locationTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: '2rem', width: '100%', maxWidth: '520px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <h3 style={{ margin: 0 }}>Update Operating Location</h3>
+              <button className="btn btn-sm btn-secondary" onClick={() => setLocationTarget(null)}>✕</button>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>{locationTarget.registrationNumber}</p>
+            <form onSubmit={handleUpdateLocation}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <select className="form-select" disabled value="India">
-                  <option value="India">India</option>
-                </select>
+                <select className="form-select" disabled value="India"><option value="India">India</option></select>
                 <select className="form-select" required value={selectedState} onChange={(e) => { setSelectedState(e.target.value); setSelectedCity(''); setSelectedLocation(''); }}>
                   <option value="">Select State</option>
                   {STATES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -997,109 +912,17 @@ const DriverDashboard = () => {
                   {selectedState && CITIES_BY_STATE[selectedState]?.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select className="form-select" required value={selectedLocation} onChange={(e) => setSelectedLocation(e.target.value)} disabled={!selectedCity}>
-                  <option value="">Select Location</option>
+                  <option value="">Select Area</option>
                   {selectedCity && LOCATIONS_BY_CITY[selectedCity]?.map(l => <option key={l} value={l}>{l}</option>)}
                 </select>
               </div>
-              <button type="submit" className="btn btn-primary" disabled={editLoading} style={{ marginTop: '1rem' }}>
-                {editLoading ? <FaSpinner style={{ animation: 'spin 1s linear infinite' }} /> : 'Save Location'}
-              </button>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setLocationTarget(null)} style={{ flex: 1 }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={editLoading} style={{ flex: 2 }}>
+                  {editLoading ? <FaSpinner style={{ animation: 'spin 1s linear infinite' }} /> : 'Save Location'}
+                </button>
+              </div>
             </form>
-          )}
-
-          {mainTruck.verified && (
-            <div
-              style={{
-                background: 'rgba(99,102,241,0.04)',
-                border: '1px solid var(--border-light)',
-                padding: '1.25rem',
-                borderRadius: 'var(--radius-md)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '1.5rem',
-              }}
-            >
-              <div>
-                <h5 style={{ fontWeight: 600, fontSize: '0.95rem' }}>Duty Availability Status</h5>
-                <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                  {mainTruck.available
-                    ? 'You are active and ready to receive bookings'
-                    : 'You are currently off-duty'}
-                </p>
-              </div>
-              <button
-                className={`btn btn-sm ${mainTruck.available ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => handleToggleAvailability(mainTruck.id)}
-              >
-                {mainTruck.available ? 'Go Offline' : 'Go Online'}
-              </button>
-            </div>
-          )}
-
-          {/* Vehicle stats row */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '0.75rem',
-              marginBottom: '1.5rem',
-            }}
-          >
-            {[
-              { label: 'Total Trips', val: totalTrips, icon: '🚛' },
-              { label: 'Active Jobs', val: activeJobs, icon: '🔄' },
-              { label: 'Completed', val: totalTrips, icon: '✅' },
-            ].map((s) => (
-              <div
-                key={s.label}
-                style={{
-                  background: 'var(--bg-dark)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '0.75rem',
-                  textAlign: 'center',
-                }}
-              >
-                <div style={{ fontSize: '1.2rem', marginBottom: 2 }}>{s.icon}</div>
-                <div style={{ fontWeight: 800, fontSize: '1.2rem' }}>{s.val}</div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                  {s.label}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <a
-              href={mainTruck.rcDocumentUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-secondary btn-sm"
-              style={{ flex: 1 }}
-            >
-              <FaFileAlt size={14} /> RC File
-            </a>
-            <a
-              href={mainTruck.licenseUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-secondary btn-sm"
-              style={{ flex: 1 }}
-            >
-              <FaFileAlt size={14} /> License File
-            </a>
-            {mainTruck.insuranceUrl && (
-              <a
-                href={mainTruck.insuranceUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-secondary btn-sm"
-                style={{ flex: 1 }}
-              >
-                <FaShieldAlt size={14} /> Insurance
-              </a>
-            )}
           </div>
         </div>
       )}
@@ -1674,24 +1497,42 @@ const DriverDashboard = () => {
           </p>
         </div>
 
-        {/* Quick status pill */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-light)',
-            borderRadius: 50,
-            padding: '0.5rem 1rem',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-          }}
-        >
-          <FaChartLine size={14} style={{ color: activeJobs > 0 ? '#10b981' : 'var(--text-muted)' }} />
-          <span style={{ color: activeJobs > 0 ? '#10b981' : 'var(--text-muted)' }}>
-            {activeJobs > 0 ? `${activeJobs} Job${activeJobs > 1 ? 's' : ''} Active` : 'No Active Jobs'}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+          {mainTruck?.id && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: mainTruck.isAvailable ? '#6366f1' : 'var(--text-muted)' }}>
+                {mainTruck.isAvailable ? 'ON DUTY' : 'OFF DUTY'}
+              </span>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={mainTruck.isAvailable}
+                  onChange={() => handleToggleAvailability(mainTruck.id)}
+                />
+                <span className="toggle-slider" style={mainTruck.isAvailable ? { backgroundColor: '#6366f1' } : {}}></span>
+              </label>
+            </div>
+          )}
+
+          {/* Quick status pill */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-light)',
+              borderRadius: 50,
+              padding: '0.5rem 1rem',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+            }}
+          >
+            <FaChartLine size={14} style={{ color: activeJobs > 0 ? '#10b981' : 'var(--text-muted)' }} />
+            <span style={{ color: activeJobs > 0 ? '#10b981' : 'var(--text-muted)' }}>
+              {activeJobs > 0 ? `${activeJobs} Job${activeJobs > 1 ? 's' : ''} Active` : 'No Active Jobs'}
+            </span>
+          </div>
         </div>
       </div>
 

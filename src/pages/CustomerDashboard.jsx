@@ -2,10 +2,9 @@ import React, { useState, useEffect, useContext } from 'react';
 import api from '../api';
 import { AuthContext } from '../context/AuthContext';
 import MyRateCardWidget from '../components/MyRateCardWidget';
-import { useLoadScript, Autocomplete } from '@react-google-maps/api';
-import { FaTimes, FaBox, FaChevronDown, FaClock, FaArrowRight, FaShieldVirus, FaCheckCircle, FaChevronUp, FaStar, FaCreditCard, FaTruck, FaSpinner, FaLocationArrow, FaChartBar, FaArrowUp, FaCalendarAlt, FaPhone, FaEnvelope, FaMapMarkerAlt, FaComment, FaPlus, FaTrash } from 'react-icons/fa';
+import { FaTimes, FaWallet, FaBox, FaChevronDown, FaClock, FaArrowRight, FaShieldVirus, FaCheckCircle, FaChevronUp, FaStar, FaCreditCard, FaTruck, FaSpinner, FaLocationArrow, FaChartBar, FaArrowUp, FaCalendarAlt, FaPhone, FaEnvelope, FaMapMarkerAlt, FaComment, FaPlus, FaTrash } from 'react-icons/fa';
 
-const libraries = ['places'];;
+
 
 // ─── Status order for the tracking stepper ──────────────────────────────────
 const TRACKING_STEPS = [
@@ -162,28 +161,8 @@ const FAQItem = ({ question, answer }) => {
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
-const CustomerDashboard = () => {
+const CustomerDashboardInner = () => {
   const { user } = useContext(AuthContext);
-
-  const [googleMapsKey, setGoogleMapsKey] = useState(null);
-  useEffect(() => {
-    const fetchMapsKey = async () => {
-      try {
-        const res = await api.get('/config/maps-key');
-        if (res.data?.data?.apiKey) {
-          setGoogleMapsKey(res.data.data.apiKey);
-        }
-      } catch (err) {
-        console.warn("Could not fetch maps key", err);
-      }
-    };
-    fetchMapsKey();
-  }, []);
-
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: googleMapsKey || '',
-    libraries,
-  });
 
   // ── Tab state ────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState(0);
@@ -194,7 +173,9 @@ const CustomerDashboard = () => {
   const [pickupCity, setPickupCity]       = useState('');
   const [dropAddress, setDropAddress]     = useState('');
   const [dropCity, setDropCity]           = useState('');
+  const [distanceKm, setDistanceKm]       = useState(0);
   const [scheduledPickupTime, setScheduledPickupTime] = useState('');
+  const [paymentMode, setPaymentMode] = useState('ONLINE');
   const [items, setItems] = useState([
     { itemName: '', quantity: 1, weightKg: 10, description: '', fragile: false }
   ]);
@@ -209,12 +190,13 @@ const CustomerDashboard = () => {
   // ── Track Packages filter ────────────────────────────────────────────────
   const [trackFilter, setTrackFilter] = useState('All');
 
-  // ── Modals ────────────────────────────────────────────────────────────────
+  // ── Modals ────────────────────────────────────────────────────────────────  // Action states
   const [cancellingShipment, setCancellingShipment] = useState(null);
-  const [cancelReason, setCancelReason]             = useState('');
-  const [ratingShipment, setRatingShipment]         = useState(null);
-  const [ratingStars, setRatingStars]               = useState(5);
-  const [ratingComment, setRatingComment]           = useState('');
+  const [cancelReason, setCancelReason] = useState('');
+  const [ratingShipment, setRatingShipment] = useState(null);
+  const [ratingStars, setRatingStars] = useState(5);
+  const [ratingComment, setRatingComment] = useState('');
+  const [selectedDetailedShipment, setSelectedDetailedShipment] = useState(null);
 
   // ── Support ticket state ──────────────────────────────────────────────────
   const [supportCategory, setSupportCategory] = useState('Technical');
@@ -242,13 +224,43 @@ const CustomerDashboard = () => {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // ── Cost calculator ──────────────────────────────────────────────────────
-  const baseFare   = 500;
-  const perKgRate  = 2.5;
+  const [estimatedCost, setEstimatedCost] = useState(0);
+
   const totalWeight = items.reduce((acc, item) => {
     return acc + (parseInt(item.quantity) || 0) * (parseFloat(item.weightKg) || 0);
   }, 0);
-  const estimatedCost = totalWeight > 0 ? baseFare + totalWeight * perKgRate : 0;
+
+  useEffect(() => {
+    const fetchEstimate = async () => {
+      if (pickupCity && dropCity && items.length > 0) {
+        try {
+          const payload = {
+            pickupCity,
+            dropCity,
+            items: items.map(it => ({
+              itemName: it.itemName,
+              quantity: parseInt(it.quantity) || 1,
+              weightKg: parseFloat(it.weightKg) || 10,
+              fragile: it.fragile
+            }))
+          };
+          const res = await api.post('/shipments/estimate', payload);
+          if (res.data?.data) {
+            setDistanceKm(res.data.data.distanceKm);
+            setEstimatedCost(res.data.data.estimatedCost);
+          }
+        } catch (error) {
+          console.log('Estimate fetch failed:', error);
+        }
+      }
+    };
+
+    const timeoutId = setTimeout(() => {
+      fetchEstimate();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [pickupCity, dropCity, items]);
 
   // ── Item handlers ────────────────────────────────────────────────────────
   const handleAddItem = () =>
@@ -267,44 +279,7 @@ const CustomerDashboard = () => {
 
   // ── Booking submit ────────────────────────────────────────────────────────
 
-  const [pickupAutocomplete, setPickupAutocomplete] = useState(null);
-  const [dropAutocomplete, setDropAutocomplete] = useState(null);
 
-  const onPickupPlaceChanged = () => {
-    if (pickupAutocomplete !== null) {
-      const place = pickupAutocomplete.getPlace();
-      setPickupAddress(place.formatted_address || place.name || '');
-      
-      let city = '';
-      let pincode = '';
-      if (place.address_components) {
-        place.address_components.forEach(comp => {
-          if (comp.types.includes('locality')) city = comp.long_name;
-          if (comp.types.includes('postal_code')) pincode = comp.long_name;
-        });
-      }
-      if (city) setPickupCity(city);
-      if (pincode) setPickupPincode(pincode);
-    }
-  };
-
-  const onDropPlaceChanged = () => {
-    if (dropAutocomplete !== null) {
-      const place = dropAutocomplete.getPlace();
-      setDropAddress(place.formatted_address || place.name || '');
-      
-      let city = '';
-      let pincode = '';
-      if (place.address_components) {
-        place.address_components.forEach(comp => {
-          if (comp.types.includes('locality')) city = comp.long_name;
-          if (comp.types.includes('postal_code')) pincode = comp.long_name;
-        });
-      }
-      if (city) setDropCity(city);
-      if (pincode) setDropPincode(pincode);
-    }
-  };
 
   const handleBookShipment = async (e) => {
     e.preventDefault();
@@ -327,6 +302,8 @@ const CustomerDashboard = () => {
       const payload = {
         pickupAddress, pickupCity, dropAddress, dropCity,
         pickupLat, pickupLng, dropLat, dropLng,
+        distanceKm,
+        paymentMode,
         scheduledPickupTime: new Date(scheduledPickupTime).toISOString().slice(0, 19),
         items: items.map(it => ({
           itemName:    it.itemName,
@@ -336,18 +313,96 @@ const CustomerDashboard = () => {
           fragile:     it.fragile
         }))
       };
-      await api.post('/shipments', payload);
-      showToast('success', 'Shipment booked successfully!');
-      setPickupAddress(''); setPickupCity(''); setDropAddress(''); setDropCity('');
+      const res = await api.post('/shipments', payload);
+      const data = res.data.data;
+      
+      if (data.razorpayOrderId) {
+        const options = {
+          key: data.razorpayKey,
+          amount: data.estimatedCost * 100, // paise
+          currency: 'INR',
+          name: 'Easy Route Logistics',
+          description: 'Shipment Booking Payment',
+          order_id: data.razorpayOrderId,
+          handler: async function (response) {
+            try {
+              await api.post(`/shipments/${data.id}/verify-payment`, {
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpayOrderId: response.razorpay_order_id,
+                razorpaySignature: response.razorpay_signature
+              });
+              showToast('success', 'Payment successful! Shipment booked.');
+              fetchShipments();
+              setActiveTab(1); // switch to Track Packages
+            } catch (err) {
+              showToast('error', 'Payment verification failed.');
+            }
+          },
+          prefill: {
+            name: user?.name || '',
+            email: user?.email || '',
+          },
+          theme: {
+            color: '#3b82f6'
+          }
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', function (response) {
+          showToast('error', 'Payment Failed: ' + response.error.description);
+        });
+        rzp.open();
+      } else {
+        showToast('success', 'Shipment booked successfully!');
+        fetchShipments();
+        setActiveTab(1);
+      }
+
+      setPickupAddress(''); setPickupCity(''); setDropAddress(''); setDropCity(''); setDistanceKm(0);
       setScheduledPickupTime('');
       setItems([{ itemName: '', quantity: 1, weightKg: 10, description: '', fragile: false }]);
-      fetchShipments();
     } catch (err) {
       setError(err.message || 'Booking failed');
       showToast('error', err.message || 'Booking failed');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handlePayNow = (shipment) => {
+    const options = {
+      key: shipment.razorpayKey,
+      amount: shipment.estimatedCost * 100,
+      currency: 'INR',
+      name: 'Easy Route Logistics',
+      description: 'Shipment Booking Payment',
+      order_id: shipment.razorpayOrderId,
+      handler: async function (response) {
+        try {
+          await api.post(`/shipments/${shipment.id}/verify-payment`, {
+            razorpayPaymentId: response.razorpay_payment_id,
+            razorpayOrderId: response.razorpay_order_id,
+            razorpaySignature: response.razorpay_signature
+          });
+          showToast('success', 'Payment successful!');
+          fetchShipments();
+        } catch (err) {
+          showToast('error', 'Payment verification failed.');
+        }
+      },
+      prefill: {
+        name: user?.name || '',
+        email: user?.email || '',
+      },
+      theme: {
+        color: '#3b82f6'
+      }
+    };
+    const rzp = new window.Razorpay(options);
+    rzp.on('payment.failed', function (response) {
+      showToast('error', 'Payment Failed: ' + response.error.description);
+    });
+    rzp.open();
   };
 
   // ── Cancel shipment ───────────────────────────────────────────────────────
@@ -580,21 +635,11 @@ const CustomerDashboard = () => {
                   <label className="form-label">Pickup Address</label>
                   <div style={{ position: 'relative' }}>
                     <FaMapMarkerAlt size={16} style={{ position: 'absolute', left: '10px', top: '14px', color: 'var(--text-muted)' }} />
-                    {isLoaded && googleMapsKey ? (
-                      <Autocomplete onLoad={setPickupAutocomplete} onPlaceChanged={onPickupPlaceChanged}>
-                        <input
-                          type="text" required placeholder="Search pickup location..."
-                          className="form-input" style={{ paddingLeft: '2.2rem' }}
-                          value={pickupAddress} onChange={(e) => setPickupAddress(e.target.value)}
-                        />
-                      </Autocomplete>
-                    ) : (
-                      <input
-                        type="text" required placeholder="123 Ware St"
-                        className="form-input" style={{ paddingLeft: '2.2rem' }}
-                        value={pickupAddress} onChange={(e) => setPickupAddress(e.target.value)}
-                      />
-                    )}
+                    <input
+                      type="text" required placeholder="123 Ware St"
+                      className="form-input" style={{ paddingLeft: '2.2rem' }}
+                      value={pickupAddress} onChange={(e) => setPickupAddress(e.target.value)}
+                    />
                   </div>
                 </div>
                 <div className="form-group">
@@ -611,21 +656,11 @@ const CustomerDashboard = () => {
                   <label className="form-label">Delivery Address</label>
                   <div style={{ position: 'relative' }}>
                     <FaLocationArrow size={16} style={{ position: 'absolute', left: '10px', top: '14px', color: 'var(--text-muted)' }} />
-                    {isLoaded && googleMapsKey ? (
-                      <Autocomplete onLoad={setDropAutocomplete} onPlaceChanged={onDropPlaceChanged}>
-                        <input
-                          type="text" required placeholder="Search drop location..."
-                          className="form-input" style={{ paddingLeft: '2.2rem' }}
-                          value={dropAddress} onChange={(e) => setDropAddress(e.target.value)}
-                        />
-                      </Autocomplete>
-                    ) : (
-                      <input
-                        type="text" required placeholder="456 Drop Ave"
-                        className="form-input" style={{ paddingLeft: '2.2rem' }}
-                        value={dropAddress} onChange={(e) => setDropAddress(e.target.value)}
-                      />
-                    )}
+                    <input
+                      type="text" required placeholder="456 Drop Ave"
+                      className="form-input" style={{ paddingLeft: '2.2rem' }}
+                      value={dropAddress} onChange={(e) => setDropAddress(e.target.value)}
+                    />
                   </div>
                 </div>
                 <div className="form-group">
@@ -712,7 +747,7 @@ const CustomerDashboard = () => {
                 }}>
                   <div>
                     <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'block' }}>
-                      Total Weight: {totalWeight.toFixed(1)} kg
+                      Cargo Weight: {totalWeight.toFixed(1)} kg • Distance: {distanceKm.toFixed(1)} km
                     </span>
                     <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>Estimated Fare</span>
                   </div>
@@ -723,6 +758,37 @@ const CustomerDashboard = () => {
                   </div>
                 </div>
               )}
+
+              {/* Payment Mode Selection */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.5rem' }}>
+                  Payment Method
+                </span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div
+                    onClick={() => setPaymentMode('ONLINE')}
+                    style={{
+                      border: `2px solid ${paymentMode === 'ONLINE' ? 'var(--color-primary)' : 'var(--border-light)'}`,
+                      borderRadius: '0.5rem', padding: '0.75rem', textAlign: 'center', cursor: 'pointer',
+                      background: paymentMode === 'ONLINE' ? 'var(--color-primary-glow)' : 'transparent',
+                      fontWeight: paymentMode === 'ONLINE' ? 700 : 500
+                    }}>
+                    <FaCreditCard size={18} style={{ display: 'block', margin: '0 auto 0.5rem', color: paymentMode === 'ONLINE' ? 'var(--color-primary)' : 'var(--text-muted)' }} />
+                    Pay Online
+                  </div>
+                  <div
+                    onClick={() => setPaymentMode('COD')}
+                    style={{
+                      border: `2px solid ${paymentMode === 'COD' ? 'var(--color-primary)' : 'var(--border-light)'}`,
+                      borderRadius: '0.5rem', padding: '0.75rem', textAlign: 'center', cursor: 'pointer',
+                      background: paymentMode === 'COD' ? 'var(--color-primary-glow)' : 'transparent',
+                      fontWeight: paymentMode === 'COD' ? 700 : 500
+                    }}>
+                    <FaWallet size={18} style={{ display: 'block', margin: '0 auto 0.5rem', color: paymentMode === 'COD' ? 'var(--color-primary)' : 'var(--text-muted)' }} />
+                    Cash on Delivery
+                  </div>
+                </div>
+              </div>
 
               <button type="submit" className="btn btn-primary"
                 style={{ width: '100%', padding: '0.85rem' }} disabled={submitting}>
@@ -758,11 +824,14 @@ const CustomerDashboard = () => {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: 680, overflowY: 'auto', paddingRight: '0.5rem' }}>
-                {shipments.slice(0, 8).map((shipment) => (
+                {shipments.filter(s => s.status !== 'CANCELLED').slice(0, 8).map((shipment) => (
                   <div key={shipment.id} className="glass-card" style={{
                     padding: '1.25rem', background: 'rgba(0,0,0,0.02)',
-                    border: '1px solid var(--border-light)'
-                  }}>
+                    border: '1px solid var(--border-light)',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => setSelectedDetailedShipment(shipment)}
+                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                       <div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', fontFamily: 'monospace' }}>
@@ -872,6 +941,13 @@ const CustomerDashboard = () => {
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                         {getStatusBadge(shipment.status)}
+                        
+                        {shipment.paymentStatus === 'PENDING' && shipment.razorpayOrderId && shipment.status !== 'CANCELLED' && (
+                          <button className="btn btn-primary btn-sm" onClick={() => handlePayNow(shipment)}>
+                            Pay Now
+                          </button>
+                        )}
+
                         {(shipment.status === 'PENDING' || shipment.status === 'ASSIGNED') && (
                           <button className="btn btn-danger btn-sm" onClick={() => setCancellingShipment(shipment)}>
                             Cancel
@@ -1068,13 +1144,19 @@ const CustomerDashboard = () => {
                             </button>
                           ) : s.status === 'CANCELLED' ? (
                             <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>—</span>
-                          ) : (
+                          ) : s.paymentStatus === 'SUCCESS' ? (
+                            <span style={{ fontSize: '0.82rem', color: 'var(--color-success)', fontWeight: 'bold' }}>PAID ONLINE</span>
+                          ) : s.paymentMode === 'COD' ? (
+                            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Pay on Delivery</span>
+                          ) : s.razorpayOrderId ? (
                             <button
                               className="btn btn-secondary btn-sm"
-                              onClick={() => showToast('info', 'Payment gateway coming soon!')}
+                              onClick={() => handlePayNow(s)}
                             >
                               <FaCreditCard size={12} /> Pay Now
                             </button>
+                          ) : (
+                            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Payment Pending</span>
                           )}
                         </td>
                       </tr>
@@ -1388,8 +1470,77 @@ const CustomerDashboard = () => {
         </div>
       )}
 
+      {/* ══════════════════════════════════════════════════════════════════
+          MODAL — Detailed Shipment View
+      ══════════════════════════════════════════════════════════════════ */}
+      {selectedDetailedShipment && (
+        <div className="modal-overlay" onClick={() => setSelectedDetailedShipment(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-light)' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>Shipment Details</h3>
+                <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>ID: {selectedDetailedShipment.id}</span>
+              </div>
+              <button onClick={() => setSelectedDetailedShipment(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <FaTimes size={20} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{selectedDetailedShipment.pickupCity}</span>
+                <FaArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
+                <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{selectedDetailedShipment.dropCity}</span>
+              </div>
+              {getStatusBadge(selectedDetailedShipment.status)}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div style={{ background: 'rgba(0,0,0,0.02)', padding: '1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>PICKUP ADDRESS</span>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', margin: 0 }}>{selectedDetailedShipment.pickupAddress}</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0 0' }}>{selectedDetailedShipment.pickupCity}</p>
+              </div>
+              <div style={{ background: 'rgba(0,0,0,0.02)', padding: '1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>DROP ADDRESS</span>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', margin: 0 }}>{selectedDetailedShipment.dropAddress}</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0 0' }}>{selectedDetailedShipment.dropCity}</p>
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(0,0,0,0.02)', padding: '1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: '0.5rem' }}>Cargo Items</span>
+              {selectedDetailedShipment.items?.map((item, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: idx !== selectedDetailedShipment.items.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
+                  <div>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{item.itemName}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>x{item.quantity}</span>
+                    {item.fragile && <span style={{ fontSize: '0.7rem', background: '#fee2e2', color: '#ef4444', padding: '2px 6px', borderRadius: '12px', marginLeft: '0.5rem' }}>Fragile</span>}
+                  </div>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{item.weightKg} kg</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-primary-glow)', padding: '1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-primary)' }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600, display: 'block' }}>TOTAL AMOUNT</span>
+                <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-primary)' }}>₹{selectedDetailedShipment.estimatedCost}</span>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block' }}>PAYMENT STATUS</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 600, color: selectedDetailedShipment.paymentStatus === 'SUCCESS' ? 'var(--color-success)' : 'var(--text-primary)' }}>
+                  {selectedDetailedShipment.paymentStatus === 'SUCCESS' ? 'PAID' : selectedDetailedShipment.paymentMode === 'COD' ? 'Cash on Delivery' : 'Unpaid'}
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
 
-export default CustomerDashboard;
+export default CustomerDashboardInner;

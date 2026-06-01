@@ -22,7 +22,22 @@ const Register = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // CMS Dynamic Data
+  const [truckTypeOptions, setTruckTypeOptions] = useState([]);
+
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    // Fetch CMS UI Data
+    fetch('http://localhost:8080/api/v2/metadata/ui-config/TRUCK_TYPES')
+      .then(res => res.json())
+      .then(data => {
+        setTruckTypeOptions(data);
+        if (data.length > 0) setTruckType(data[0]);
+      })
+      .catch(err => console.error("Failed to load CMS data", err));
+  }, []);
 
   const handleFileChange = (e, setter) => {
     const file = e.target.files[0];
@@ -230,10 +245,9 @@ const Register = () => {
                   <div style={{ position: 'relative' }}>
                     <FaTruck size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     <select id="truckType" className="form-select" style={{ paddingLeft: '2.5rem' }} value={truckType} onChange={(e) => setTruckType(e.target.value)}>
-                      <option value="MINI">Mini Truck</option>
-                      <option value="MEDIUM">Medium Duty</option>
-                      <option value="LARGE">Large Duty</option>
-                      <option value="HEAVY">Heavy Duty</option>
+                      {truckTypeOptions.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
